@@ -43,6 +43,10 @@ class MethodChannelWebViewPlatform implements WebViewPlatformController {
       case 'onPageStarted':
         _platformCallbacksHandler.onPageStarted(call.arguments['url']);
         return null;
+      //add by stones
+      case 'onCustomCommand':
+        var res = _platformCallbacksHandler.onCustomCommand(call.arguments);
+        return res != null;
     }
     throw MissingPluginException(
         '${call.method} was invoked but has no handler');
@@ -110,6 +114,12 @@ class MethodChannelWebViewPlatform implements WebViewPlatformController {
 
   @override
   Future<String> getTitle() => _channel.invokeMethod<String>("getTitle");
+
+  @override
+  Future<String> customCommandToWebview(String para) {
+    return _channel.invokeMethod<String>(
+        'customCommandToWebview', para);
+  }
 
   /// Method channel implementation for [WebViewPlatform.clearCookies].
   static Future<bool> clearCookies() {

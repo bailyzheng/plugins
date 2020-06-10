@@ -79,6 +79,9 @@ typedef void PageStartedCallback(String url);
 /// Signature for when a [WebView] has finished loading a page.
 typedef void PageFinishedCallback(String url);
 
+// add by stones
+typedef Future<String> CustomCommandCallback(dynamic arguments);
+
 /// Specifies possible restrictions on automatic media playback.
 ///
 /// This is typically used in [WebView.initialMediaPlaybackPolicy].
@@ -152,6 +155,7 @@ class WebView extends StatefulWidget {
     this.userAgent,
     this.initialMediaPlaybackPolicy =
         AutoMediaPlaybackPolicy.require_user_action_for_all_media_types,
+    this.onCustomCommand,
   })  : assert(javascriptMode != null),
         assert(initialMediaPlaybackPolicy != null),
         super(key: key);
@@ -276,6 +280,9 @@ class WebView extends StatefulWidget {
   /// directly in the HTML has been loaded and code injected with
   /// [WebViewController.evaluateJavascript] can assume this.
   final PageFinishedCallback onPageFinished;
+
+  /// add by stones
+  final CustomCommandCallback onCustomCommand;
 
   /// Controls whether WebView debugging is enabled.
   ///
@@ -491,6 +498,11 @@ class _PlatformCallbacksHandler implements WebViewPlatformCallbacksHandler {
       _javascriptChannels[channel.name] = channel;
     }
   }
+
+  @override
+  Future<String> onCustomCommand(arguments) {
+    return _widget.onCustomCommand(arguments);
+  }
 }
 
 /// Controls a [WebView].
@@ -658,6 +670,11 @@ class WebViewController {
   /// Returns the title of the currently loaded page.
   Future<String> getTitle() {
     return _webViewPlatformController.getTitle();
+  }
+
+  //add by stones
+  Future<String> customCommandToWebview(String para) {
+    return _webViewPlatformController.customCommandToWebview(para);
   }
 }
 

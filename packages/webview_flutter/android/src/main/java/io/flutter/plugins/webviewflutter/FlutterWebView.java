@@ -7,27 +7,49 @@ package io.flutter.plugins.webviewflutter;
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.hardware.display.DisplayManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
+import android.util.Log;
 import android.view.View;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
 import android.webkit.WebStorage;
+import android.webkit.WebView;
 import android.webkit.WebViewClient;
+
+import androidx.core.content.FileProvider;
+
+import org.json.JSONObject;
+
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.platform.PlatformView;
+
+import java.io.File;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.json.JSONArray;
+import org.json.JSONException;
 
 public class FlutterWebView implements PlatformView, MethodCallHandler {
+  private static final String TAG = "FlutterWebView";
   private static final String JS_CHANNEL_NAMES_FIELD = "javascriptChannelNames";
   private final InputAwareWebView webView;
   private final MethodChannel methodChannel;
   private final FlutterWebViewClient flutterWebViewClient;
   private final Handler platformThreadHandler;
+
+  //add by stones
+  private ValueCallback<Uri[]> fileCallback;
+  private Context context;
 
   @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
   @SuppressWarnings("unchecked")
@@ -37,7 +59,7 @@ public class FlutterWebView implements PlatformView, MethodCallHandler {
       int id,
       Map<String, Object> params,
       View containerView) {
-
+    this.context = context;
     DisplayListenerProxy displayListenerProxy = new DisplayListenerProxy();
     DisplayManager displayManager =
         (DisplayManager) context.getSystemService(Context.DISPLAY_SERVICE);
@@ -46,9 +68,35 @@ public class FlutterWebView implements PlatformView, MethodCallHandler {
     displayListenerProxy.onPostWebViewInitialization(displayManager);
 
     platformThreadHandler = new Handler(context.getMainLooper());
+
+    webView.getSettings().setUseWideViewPort(true);
+    webView.getSettings().setLoadWithOverviewMode(true);
+    webView.getSettings().setSupportZoom(true);
+
+    // 便页面支持缩放
+    webView.getSettings().setJavaScriptEnabled(true);
+    webView.getSettings().setSupportZoom(true);
+    // Allow local storage.
+    webView.getSettings().setDomStorageEnabled(true);
+    webView.getSettings().setSupportMultipleWindows(true);
+
+    webView.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
+    webView.getSettings().setAllowContentAccess(true);
+    webView.getSettings().setAllowFileAccess(true);
+    webView.getSettings().setAllowFileAccessFromFileURLs(true);
+    webView.getSettings().setAllowUniversalAccessFromFileURLs(true);
+    webView.getSettings().setAppCacheEnabled(true);
+    webView.getSettings().setCacheMode(WebSettings.LOAD_DEFAULT);
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+      webView.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+    }
+
     // Allow local storage.
     webView.getSettings().setDomStorageEnabled(true);
     webView.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
+
+    setChromeClient(webView);
 
     methodChannel = new MethodChannel(messenger, "plugins.flutter.io/webview_" + id);
     methodChannel.setMethodCallHandler(this);
@@ -69,6 +117,52 @@ public class FlutterWebView implements PlatformView, MethodCallHandler {
       String url = (String) params.get("initialUrl");
       webView.loadUrl(url);
     }
+  }
+
+  void setChromeClient(WebView mWebView) {
+      mWebView.setWebChromeClient(new WebChromeClient() {
+        @Override
+        public void onProgressChanged(WebView view, int newProgress) {
+          super.onProgressChanged(view, newProgress);
+        }
+
+        @Override
+        public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
+          Log.v(TAG, "onShowFileChooser");
+          fileCallback = filePathCallback;
+          boolean handled = false;
+          if (fileChooserParams != null && fileChooserParams.getAcceptTypes() != null) {
+            Log.v(TAG, "accept type is not null");
+            handled = true;
+            JSONObject jsonObject = new JSONObject();
+            try {
+              jsonObject.put("method", "pick_file");
+            } catch (JSONException e) {
+              e.printStackTrace();
+            }
+            JSONArray jsonArray = new JSONArray();
+            for (int i = 0; i < fileChooserParams.getAcceptTypes().length; i++) {
+              jsonArray.put(fileChooserParams.getAcceptTypes()[i]);
+            }
+            Map<Integer, String> modeMap = new HashMap<>();
+            modeMap.put(FileChooserParams.MODE_OPEN, "MODE_OPEN");
+            modeMap.put(FileChooserParams.MODE_OPEN_MULTIPLE, "MODE_OPEN_MULTIPLE");
+            modeMap.put(FileChooserParams.MODE_SAVE, "MODE_SAVE");
+            try {
+              jsonObject.put("acceptTypes", jsonArray);
+              jsonObject.put("mode", modeMap.get(fileChooserParams.getMode()));
+            } catch (JSONException e) {
+              e.printStackTrace();
+            }
+            methodChannel.invokeMethod("onCustomCommand", jsonObject.toString());
+          }
+          if (!handled) {
+            fileCallback.onReceiveValue(null);
+          }
+
+          return true;
+        }
+      });
   }
 
   @Override
@@ -157,6 +251,9 @@ public class FlutterWebView implements PlatformView, MethodCallHandler {
         break;
       case "getTitle":
         getTitle(result);
+        break;
+      case "customCommandToWebview":
+        customCommandToWebview(methodCall, result);
         break;
       default:
         result.notImplemented();
@@ -254,6 +351,41 @@ public class FlutterWebView implements PlatformView, MethodCallHandler {
     result.success(webView.getTitle());
   }
 
+  //add by stones
+  private void customCommandToWebview(MethodCall methodCall, MethodChannel.Result result) {
+    List<String> files = new ArrayList<>();
+    JSONObject jsonObj = null;
+    try {
+      jsonObj = new JSONObject(methodCall.arguments.toString());
+    if (jsonObj.get("method").toString().equals("pick_file")) {
+        JSONArray arrayObj = jsonObj.getJSONArray("result");
+        if (arrayObj != null) {
+          for (int i = 0; i < arrayObj.length(); i++) {
+            files.add(arrayObj.get(i).toString());
+          }
+          Log.v(TAG, "files is $files");
+        }
+
+      if (!files.isEmpty()) {
+        Uri[] convertedUris = new Uri[files.size()];
+        for (int i = 0; i < files.size(); i++) {
+          convertedUris[i] = FileProvider.getUriForFile(context, context.getPackageName() + ".fileProvider", new File(files.get(i)));
+        }
+        fileCallback.onReceiveValue(convertedUris);
+      } else {
+        fileCallback.onReceiveValue(null);
+      }
+      result.success("SUCCESS");
+    } else if (jsonObj.get("method").toString().equals("qmInputFiles")) {
+      String res = jsonObj.get("args").toString();
+      Log.v(TAG, "res is " + res);
+      webView.loadUrl("javascript:qmInputFiles('" + res +"')");
+      result.success("SUCCESS");
+    }
+    } catch (JSONException e) {
+      e.printStackTrace();
+    }
+  }
   private void applySettings(Map<String, Object> settings) {
     for (String key : settings.keySet()) {
       switch (key) {
