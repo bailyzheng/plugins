@@ -97,8 +97,6 @@ public class FlutterWebView implements PlatformView, MethodCallHandler {
     webView.getSettings().setDomStorageEnabled(true);
     webView.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
 
-    webView.setBackgroundColor(Color.TRANSPARENT);
-
     setChromeClient(webView);
 
     methodChannel = new MethodChannel(messenger, "plugins.flutter.io/webview_" + id);
@@ -360,31 +358,33 @@ public class FlutterWebView implements PlatformView, MethodCallHandler {
     JSONObject jsonObj = null;
     try {
       jsonObj = new JSONObject(methodCall.arguments.toString());
-    if (jsonObj.get("method").toString().equals("pick_file")) {
-        JSONArray arrayObj = jsonObj.getJSONArray("result");
-        if (arrayObj != null) {
-          for (int i = 0; i < arrayObj.length(); i++) {
-            files.add(arrayObj.get(i).toString());
+      if (jsonObj.get("method").toString().equals("pick_file")) {
+          JSONArray arrayObj = jsonObj.getJSONArray("result");
+          if (arrayObj != null) {
+            for (int i = 0; i < arrayObj.length(); i++) {
+              files.add(arrayObj.get(i).toString());
+            }
+            Log.v(TAG, "files is $files");
           }
-          Log.v(TAG, "files is $files");
-        }
 
-      if (!files.isEmpty()) {
-        Uri[] convertedUris = new Uri[files.size()];
-        for (int i = 0; i < files.size(); i++) {
-          convertedUris[i] = FileProvider.getUriForFile(context, context.getPackageName() + ".fileProvider", new File(files.get(i)));
+        if (!files.isEmpty()) {
+          Uri[] convertedUris = new Uri[files.size()];
+          for (int i = 0; i < files.size(); i++) {
+            convertedUris[i] = FileProvider.getUriForFile(context, context.getPackageName() + ".fileProvider", new File(files.get(i)));
+          }
+          fileCallback.onReceiveValue(convertedUris);
+        } else {
+          fileCallback.onReceiveValue(null);
         }
-        fileCallback.onReceiveValue(convertedUris);
-      } else {
-        fileCallback.onReceiveValue(null);
+        result.success("SUCCESS");
+      } else if (jsonObj.get("method").toString().equals("qmInputFiles")) {
+        String res = jsonObj.get("args").toString();
+        Log.v(TAG, "res is " + res);
+        webView.loadUrl("javascript:qmInputFiles('" + res +"')");
+        result.success("SUCCESS");
+      } else if (jsonObj.get("method").toString().equals("transparent")) {
+        webView.setBackgroundColor(Color.TRANSPARENT);
       }
-      result.success("SUCCESS");
-    } else if (jsonObj.get("method").toString().equals("qmInputFiles")) {
-      String res = jsonObj.get("args").toString();
-      Log.v(TAG, "res is " + res);
-      webView.loadUrl("javascript:qmInputFiles('" + res +"')");
-      result.success("SUCCESS");
-    }
     } catch (JSONException e) {
       e.printStackTrace();
     }
