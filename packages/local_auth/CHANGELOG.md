@@ -1,3 +1,26 @@
+## 0.6.2+4
+
+* Update package:e2e reference to use the local version in the flutter/plugins
+  repository.
+
+## 0.6.2+3
+
+* Post-v2 Android embedding cleanup.
+
+## 0.6.2+2
+
+* Update lower bound of dart dependency to 2.1.0.
+
+## 0.6.2+1
+
+* Fix CocoaPods podspec lint warnings.
+
+## 0.6.2
+
+* Remove Android dependencies fallback.
+* Require Flutter SDK 1.12.13+hotfix.5 or greater.
+* Fix block implicitly retains 'self' warning.
+
 ## 0.6.1+4
 
 * Replace deprecated `getFlutterEngine` call on Android.
