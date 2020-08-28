@@ -254,6 +254,7 @@ public class FlutterWebView implements PlatformView, MethodCallHandler {
         break;
       case "customCommandToWebview":
         customCommandToWebview(methodCall, result);
+        break;
       case "scrollTo":
         scrollTo(methodCall, result);
         break;
